@@ -4,8 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 )
 
 type JSONRPCRequest struct {
@@ -28,47 +32,164 @@ type JSONError struct {
 }
 
 var vaultPath = "/opt/obsidian-vault"
+var port = "3333"
+
+type Session struct {
+	id     string
+	writer *bufio.Writer
+	mu     sync.Mutex
+}
+
+var sessions = make(map[string]*Session)
+var sessionsMu sync.RWMutex
 
 func main() {
 	if len(os.Args) > 1 {
 		vaultPath = os.Args[1]
 	}
-
-	scanner := bufio.NewScanner(os.Stdin)
-	writer := bufio.NewWriter(os.Stdout)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		var req JSONRPCRequest
-		if err := json.Unmarshal([]byte(line), &req); err != nil {
-			continue
-		}
-
-		var resp JSONRPCResponse
-		switch req.Method {
-		case "initialize":
-			resp = handleInitialize(req.ID)
-		case "tools/list":
-			resp = handleToolsList(req.ID)
-		case "tools/call":
-			resp = handleToolsCall(req.ID, req.Params)
-		default:
-			resp = JSONRPCResponse{
-				JSONRPC: "2.0",
-				ID:      req.ID,
-				Error:   &JSONError{Code: -32601, Message: "Method not found"},
-			}
-		}
-
-		respBytes, _ := json.Marshal(resp)
-		writer.Write(respBytes)
-		writer.WriteString("\n")
-		writer.Flush()
+	if len(os.Args) > 2 {
+		port = os.Args[2]
 	}
+
+	// Check if running in stdio mode (no port argument) or HTTP mode
+	if len(os.Args) <= 2 {
+		// Stdio mode
+		scanner := bufio.NewScanner(os.Stdin)
+		writer := bufio.NewWriter(os.Stdout)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+
+			var req JSONRPCRequest
+			if err := json.Unmarshal([]byte(line), &req); err != nil {
+				continue
+			}
+
+			var resp JSONRPCResponse
+			switch req.Method {
+			case "initialize":
+				resp = handleInitialize(req.ID)
+			case "tools/list":
+				resp = handleToolsList(req.ID)
+			case "tools/call":
+				resp = handleToolsCall(req.ID, req.Params)
+			default:
+				resp = JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Error:   &JSONError{Code: -32601, Message: "Method not found"},
+				}
+			}
+
+			respBytes, _ := json.Marshal(resp)
+			writer.Write(respBytes)
+			writer.WriteString("\n")
+			writer.Flush()
+		}
+		return
+	}
+
+	// HTTP/SSE mode
+	http.HandleFunc("/sse", handleSSE)
+	http.HandleFunc("/message", handleMessage)
+	http.HandleFunc("/health", handleHealth)
+
+	log.Printf("Starting obsidian-mcp on port %s", port)
+	log.Printf("Vault path: %s", vaultPath)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("OK"))
+}
+
+func handleSSE(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return
+	}
+
+	sessionID := r.URL.Query().Get("sessionId")
+	if sessionID == "" {
+		sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())
+	}
+
+	writer := bufio.NewWriter(w)
+
+	session := &Session{
+		id:     sessionID,
+		writer: writer,
+	}
+	sessionsMu.Lock()
+	sessions[sessionID] = session
+	sessionsMu.Unlock()
+
+	defer func() {
+		sessionsMu.Lock()
+		delete(sessions, sessionID)
+		sessionsMu.Unlock()
+	}()
+
+	writer.Write([]byte("event: connected\n"))
+	writer.Write([]byte(fmt.Sprintf("data: {\"sessionId\":\"%s\"}\n\n", sessionID)))
+	writer.Flush()
+	flusher.Flush()
+
+	<-r.Context().Done()
+}
+
+func handleMessage(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.URL.Query().Get("sessionId")
+	if sessionID == "" {
+		http.Error(w, "sessionId required", http.StatusBadRequest)
+		return
+	}
+
+	sessionsMu.RLock()
+	session, exists := sessions[sessionID]
+	sessionsMu.RUnlock()
+
+	if !exists || session == nil {
+		http.Error(w, "no active session", http.StatusBadRequest)
+		return
+	}
+
+	var req JSONRPCRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
+	var resp JSONRPCResponse
+	switch req.Method {
+	case "initialize":
+		resp = handleInitialize(req.ID)
+	case "tools/list":
+		resp = handleToolsList(req.ID)
+	case "tools/call":
+		resp = handleToolsCall(req.ID, req.Params)
+	default:
+		resp = JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error:   &JSONError{Code: -32601, Message: "Method not found"},
+		}
+	}
+
+	respBytes, _ := json.Marshal(resp)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(respBytes)
 }
 
 func handleInitialize(id interface{}) JSONRPCResponse {
