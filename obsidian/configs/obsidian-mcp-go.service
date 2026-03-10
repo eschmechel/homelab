@@ -1,0 +1,12 @@
+[Unit]
+Description=Obsidian Custom MCP Server (Go)
+After=obsidian-headless.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/obsidian-mcp /opt/obsidian-vault 3333
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
