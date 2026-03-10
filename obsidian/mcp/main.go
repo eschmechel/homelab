@@ -37,9 +37,13 @@ var port = "3333"
 
 func init() {
 	apiKey = os.Getenv("API_KEY")
+	githubClientID = os.Getenv("GITHUB_CLIENT_ID")
+	githubClientSecret = os.Getenv("GITHUB_CLIENT_SECRET")
 }
 
 var apiKey string
+var githubClientID string
+var githubClientSecret string
 
 type Session struct {
 	id     string
@@ -154,16 +158,34 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMessage(w http.ResponseWriter, r *http.Request) {
+	// Check authentication (API key or OAuth)
+	authorized := false
+
 	// Check API key if configured
 	if apiKey != "" {
 		providedKey := r.Header.Get("Authorization")
 		if providedKey == "" {
 			providedKey = r.URL.Query().Get("api_key")
 		}
-		if providedKey != apiKey {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+		if providedKey == apiKey {
+			authorized = true
 		}
+	}
+
+	// Check OAuth token if configured
+	if !authorized && githubClientID != "" && githubClientSecret != "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			if validateGitHubToken(token) {
+				authorized = true
+			}
+		}
+	}
+
+	if !authorized {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	sessionID := r.URL.Query().Get("sessionId")
@@ -584,4 +606,24 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 		ID:      id,
 		Error:   &JSONError{Code: -32602, Message: "Unknown tool"},
 	}
+}
+
+func validateGitHubToken(token string) bool {
+	// Validate token against GitHub API
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("GitHub token validation error: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == 200
 }
