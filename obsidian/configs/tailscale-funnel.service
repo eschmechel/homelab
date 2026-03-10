@@ -1,0 +1,15 @@
+[Unit]
+Description=Tailscale Funnel - Expose MCP server on port 443
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tailscale serve --tcp 443 localhost:3333
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
