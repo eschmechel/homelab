@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,12 @@ func main() {
 	http.HandleFunc("/message", handleMessage)
 	http.HandleFunc("/health", handleHealth)
 
+	// OAuth endpoints for GitHub
+	if githubClientID != "" && githubClientSecret != "" {
+		http.HandleFunc("/authorize", handleAuthorize)
+		http.HandleFunc("/oauth/callback", handleOAuthCallback)
+	}
+
 	log.Printf("Starting obsidian-mcp on port %s", port)
 	log.Printf("Vault path: %s", vaultPath)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -115,6 +122,75 @@ func main() {
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+func handleAuthorize(w http.ResponseWriter, r *http.Request) {
+	if githubClientID == "" || githubClientSecret == "" {
+		http.Error(w, "OAuth not configured", http.StatusBadRequest)
+		return
+	}
+
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	state := r.URL.Query().Get("state")
+
+	// Build GitHub OAuth URL
+	authURL := fmt.Sprintf("https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=read:user&state=%s",
+		githubClientID,
+		url.QueryEscape(redirectURI),
+		state,
+	)
+
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+}
+
+func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	state := r.URL.Query().Get("state")
+
+	// Exchange code for token
+	tokenURL := "https://github.com/login/oauth/access_token"
+	reqBody := fmt.Sprintf("client_id=%s&client_secret=%s&code=%s",
+		url.QueryEscape(githubClientID),
+		url.QueryEscape(githubClientSecret),
+		url.QueryEscape(code),
+	)
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(reqBody))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	accessToken, ok := result["access_token"].(string)
+	if !ok {
+		http.Error(w, "Failed to get access token", http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect back with token
+	finalRedirect := redirectURI + "#access_token=" + accessToken
+	if state != "" {
+		finalRedirect += "&state=" + state
+	}
+
+	http.Redirect(w, r, finalRedirect, http.StatusTemporaryRedirect)
 }
 
 func handleSSE(w http.ResponseWriter, r *http.Request) {

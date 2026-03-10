@@ -1,5 +1,6 @@
 # Binaries
 obsidian-mcp
+obsidian/mcp/mcp
 *.exe
 *.dll
 *.so
