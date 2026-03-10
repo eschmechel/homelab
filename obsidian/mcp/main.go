@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+func resolvePath(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(vaultPath, path)
+}
+
 type JSONRPCRequest struct {
 	JSONRPC string         `json:"jsonrpc"`
 	ID      interface{}    `json:"id"`
@@ -507,7 +514,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 	switch toolName {
 	case "list_directory":
 		path, _ := arguments["path"].(string)
-		fullPath := filepath.Join(vaultPath, path)
+		fullPath := resolvePath(path)
 		entries, err := os.ReadDir(fullPath)
 		if err != nil {
 			return JSONRPCResponse{
@@ -532,7 +539,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 
 	case "read_file":
 		path, _ := arguments["path"].(string)
-		fullPath := filepath.Join(vaultPath, path)
+		fullPath := resolvePath(path)
 		data, err := os.ReadFile(fullPath)
 		if err != nil {
 			return JSONRPCResponse{
@@ -554,7 +561,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 	case "write_file":
 		path, _ := arguments["path"].(string)
 		content, _ := arguments["content"].(string)
-		fullPath := filepath.Join(vaultPath, path)
+		fullPath := resolvePath(path)
 		dir := filepath.Dir(fullPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return JSONRPCResponse{
@@ -582,7 +589,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 
 	case "delete_file":
 		path, _ := arguments["path"].(string)
-		fullPath := filepath.Join(vaultPath, path)
+		fullPath := resolvePath(path)
 		if err := os.Remove(fullPath); err != nil {
 			return JSONRPCResponse{
 				JSONRPC: "2.0",
@@ -602,7 +609,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 
 	case "create_directory":
 		path, _ := arguments["path"].(string)
-		fullPath := filepath.Join(vaultPath, path)
+		fullPath := resolvePath(path)
 		if err := os.MkdirAll(fullPath, 0755); err != nil {
 			return JSONRPCResponse{
 				JSONRPC: "2.0",
@@ -625,7 +632,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 		searchPath, _ := arguments["path"].(string)
 		fullPath := vaultPath
 		if searchPath != "" {
-			fullPath = filepath.Join(vaultPath, searchPath)
+			fullPath = resolvePath(searchPath)
 		}
 		var results []string
 		filepath.Walk(fullPath, func(p string, info os.FileInfo, err error) error {
@@ -655,7 +662,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 		searchPath, _ := arguments["path"].(string)
 		fullPath := vaultPath
 		if searchPath != "" {
-			fullPath = filepath.Join(vaultPath, searchPath)
+			fullPath = resolvePath(searchPath)
 		}
 		var results []string
 		filepath.Walk(fullPath, func(p string, info os.FileInfo, err error) error {
@@ -685,8 +692,8 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 	case "move_file":
 		source, _ := arguments["source"].(string)
 		dest, _ := arguments["dest"].(string)
-		srcPath := filepath.Join(vaultPath, source)
-		dstPath := filepath.Join(vaultPath, dest)
+		srcPath := resolvePath(source)
+		dstPath := resolvePath(dest)
 		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 			return JSONRPCResponse{
 				JSONRPC: "2.0",
@@ -713,7 +720,7 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 
 	case "get_file_info":
 		path, _ := arguments["path"].(string)
-		fullPath := filepath.Join(vaultPath, path)
+		fullPath := resolvePath(path)
 		info, err := os.Stat(fullPath)
 		if err != nil {
 			return JSONRPCResponse{
