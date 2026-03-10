@@ -1,0 +1,25 @@
+# Binaries
+obsidian-mcp
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output
+/bin/
+/obj/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+go.work
+*.test
+coverage.out
