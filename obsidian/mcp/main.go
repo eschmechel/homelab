@@ -107,6 +107,7 @@ func main() {
 	// HTTP/SSE mode
 	http.HandleFunc("/sse", handleSSE)
 	http.HandleFunc("/message", handleMessage)
+	http.HandleFunc("/rpc", handleRPC)
 	http.HandleFunc("/health", handleHealth)
 
 	// OAuth endpoints for GitHub
@@ -122,6 +123,61 @@ func main() {
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+func handleRPC(w http.ResponseWriter, r *http.Request) {
+	authorized := false
+
+	if apiKey != "" {
+		providedKey := r.Header.Get("Authorization")
+		if providedKey == "" {
+			providedKey = r.URL.Query().Get("api_key")
+		}
+		if providedKey == apiKey {
+			authorized = true
+		}
+	}
+
+	if !authorized && githubClientID != "" && githubClientSecret != "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			if validateGitHubToken(token) {
+				authorized = true
+			}
+		}
+	}
+
+	if !authorized {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req JSONRPCRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var resp JSONRPCResponse
+	switch req.Method {
+	case "initialize":
+		resp = handleInitialize(req.ID)
+	case "tools/list":
+		resp = handleToolsList(req.ID)
+	case "tools/call":
+		resp = handleToolsCall(req.ID, req.Params)
+	default:
+		resp = JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error:   &JSONError{Code: -32601, Message: "Method not found"},
+		}
+	}
+
+	respBytes, _ := json.Marshal(resp)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(respBytes)
 }
 
 func handleAuthorize(w http.ResponseWriter, r *http.Request) {
