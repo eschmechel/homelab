@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare Tunnel for Obsidian MCP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared tunnel run obsidian-mcp
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
