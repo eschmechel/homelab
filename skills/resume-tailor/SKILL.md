@@ -12,13 +12,20 @@ Use this skill when the user wants to:
 
 ## Vault Structure
 
-Your resume is located at:
-- `~/Documents/resumes/` - Main resume directory
+Your resume system is in the Obsidian vault:
+- `20-Career/22-Resumes/` - Master resume and generated versions
+- `20-Career/21-Applications/` - Job applications
+- `20-Career/24-Interview-Prep/` - Interview preparation
 
-Resume files:
-- `resume.tex` - Main LaTeX resume
-- `resume.pdf` - Compiled PDF version
-- `Applications.md` - List of all applications
+The vault is synced via obsidian-headless on your homelab.
+
+## Master Resume Location
+
+The master resume files are stored at:
+- `~/Documents/resumes/resume.tex` - LaTeX source
+- `~/Documents/resumes/resume.pdf` - Compiled PDF
+
+These sync to the vault via Obsidian Sync.
 
 ## Tools
 

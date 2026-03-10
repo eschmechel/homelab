@@ -16,7 +16,13 @@ Use this skill when the user wants to:
 Your Obsidian vault is located at `/opt/obsidian-vault` with these main folders:
 - `00-Inbox` - New notes awaiting processing
 - `10-Academic` - Academic notes and coursework
-- `20-Career` - Career-related notes, resume, job search
+- `20-Career` - Career-related notes
+  - `21-Applications/` - Job applications (2026-Spring/, Archive/)
+  - `22-Resumes/` - Master resume and generated versions
+  - `23-LinkedIn/` - LinkedIn contacts and strategies
+  - `24-Interview-Prep/` - Interview preparation notes
+  - `25-Company-Research/` - Company research and notes
+  - `26-Salary-Tracker/` - Salary tracking and negotiation notes
 - `30-Daily` - Daily journal entries
 - `40-Knowledge` - Main knowledge base (wiki-style notes)
 - `50-Converted` - Imported/converted notes
