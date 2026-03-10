@@ -21,11 +21,9 @@ The vault is synced via obsidian-headless on your homelab.
 
 ## Master Resume Location
 
-The master resume files are stored at:
-- `~/Documents/resumes/resume.tex` - LaTeX source
-- `~/Documents/resumes/resume.pdf` - Compiled PDF
-
-These sync to the vault via Obsidian Sync.
+The master resume files are in the vault at:
+- `20-Career/22-Resumes/master_resume.tex` - LaTeX source
+- `20-Career/22-Resumes/master_resume.pdf` - Compiled PDF
 
 ## Tools
 
@@ -47,11 +45,11 @@ Use the obsidian-vault MCP to:
 
 ```
 22-Resumes/
-├── resume.tex          # Master LaTeX
-├── resume.pdf         # Master PDF
-├── Master-Index.md    # List of all resumes
-├── Generated/         # AI-generated variations
-├── ada_DevOps/       # Job-specific resumes
+├── master_resume.tex     # Master LaTeX
+├── master_resume.pdf    # Master PDF
+├── Master-Index.md      # List of all resumes
+├── Generated/           # AI-generated variations
+├── ada_DevOps/        # Job-specific resumes
 │   └── resume.pdf
 ├── Apple_Expert/
 │   └── resume.pdf

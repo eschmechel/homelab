@@ -23,8 +23,8 @@ Your job tracking system:
 │   │   └── ...
 │   └── Archive/              # Past applications
 ├── 22-Resumes/               # Master + tailored resumes
-│   ├── resume.tex
-│   ├── resume.pdf
+│   ├── master_resume.tex
+│   ├── master_resume.pdf
 │   ├── Master-Index.md
 │   ├── Generated/
 │   ├── ada_DevOps/
