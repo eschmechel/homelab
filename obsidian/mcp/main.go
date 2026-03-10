@@ -34,7 +34,12 @@ type JSONError struct {
 
 var vaultPath = "/opt/obsidian-vault"
 var port = "3333"
-var apiKey = ""
+
+func init() {
+	apiKey = os.Getenv("API_KEY")
+}
+
+var apiKey string
 
 type Session struct {
 	id     string
@@ -51,9 +56,6 @@ func main() {
 	}
 	if len(os.Args) > 2 {
 		port = os.Args[2]
-	}
-	if len(os.Args) > 3 {
-		apiKey = os.Args[3]
 	}
 
 	// Check if running in stdio mode (no port argument) or HTTP mode

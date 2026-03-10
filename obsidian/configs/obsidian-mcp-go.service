@@ -4,6 +4,7 @@ After=obsidian-headless.service
 
 [Service]
 Type=simple
+EnvironmentFile=/etc/obsidian-mcp.env
 ExecStart=/usr/local/bin/obsidian-mcp /opt/obsidian-vault 3333
 Restart=on-failure
 RestartSec=5

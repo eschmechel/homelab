@@ -23,3 +23,7 @@ Thumbs.db
 go.work
 *.test
 coverage.out
+
+# Environment
+.env
+*.env.local
