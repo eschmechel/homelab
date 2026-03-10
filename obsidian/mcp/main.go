@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -254,6 +255,64 @@ func handleToolsList(id interface{}) JSONRPCResponse {
 				"required": []string{"path"},
 			},
 		},
+		{
+			"name":        "create_directory",
+			"description": "Create a new directory",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{"type": "string", "description": "Relative path to directory"},
+				},
+				"required": []string{"path"},
+			},
+		},
+		{
+			"name":        "search_files",
+			"description": "Search for files by name pattern",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pattern": map[string]any{"type": "string", "description": "Glob pattern"},
+					"path":    map[string]any{"type": "string", "description": "Directory to search"},
+				},
+				"required": []string{"pattern"},
+			},
+		},
+		{
+			"name":        "search_content",
+			"description": "Search for text within files",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string", "description": "Text to search for"},
+					"path":  map[string]any{"type": "string", "description": "Directory to search"},
+				},
+				"required": []string{"query"},
+			},
+		},
+		{
+			"name":        "move_file",
+			"description": "Move or rename a file",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"source": map[string]any{"type": "string", "description": "Source path"},
+					"dest":   map[string]any{"type": "string", "description": "Destination path"},
+				},
+				"required": []string{"source", "dest"},
+			},
+		},
+		{
+			"name":        "get_file_info",
+			"description": "Get file metadata",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{"type": "string", "description": "Relative path to file"},
+				},
+				"required": []string{"path"},
+			},
+		},
 	}
 
 	return JSONRPCResponse{
@@ -365,6 +424,138 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 			Result: map[string]any{
 				"content": []map[string]any{
 					{"type": "text", "text": fmt.Sprintf("File deleted: %s", path)},
+				},
+			},
+		}
+
+	case "create_directory":
+		path, _ := arguments["path"].(string)
+		fullPath := filepath.Join(vaultPath, path)
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: fmt.Sprintf("Error: %v", err)},
+			}
+		}
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": fmt.Sprintf("Directory created: %s", path)},
+				},
+			},
+		}
+
+	case "search_files":
+		pattern, _ := arguments["pattern"].(string)
+		searchPath, _ := arguments["path"].(string)
+		fullPath := vaultPath
+		if searchPath != "" {
+			fullPath = filepath.Join(vaultPath, searchPath)
+		}
+		var results []string
+		filepath.Walk(fullPath, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			name := filepath.Base(p)
+			matched, _ := filepath.Match(pattern, name)
+			if matched {
+				rel, _ := filepath.Rel(vaultPath, p)
+				results = append(results, rel)
+			}
+			return nil
+		})
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": strings.Join(results, "\n")},
+				},
+			},
+		}
+
+	case "search_content":
+		query, _ := arguments["query"].(string)
+		searchPath, _ := arguments["path"].(string)
+		fullPath := vaultPath
+		if searchPath != "" {
+			fullPath = filepath.Join(vaultPath, searchPath)
+		}
+		var results []string
+		filepath.Walk(fullPath, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(p, ".md") {
+				return nil
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return nil
+			}
+			if strings.Contains(string(data), query) {
+				rel, _ := filepath.Rel(vaultPath, p)
+				results = append(results, rel)
+			}
+			return nil
+		})
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": strings.Join(results, "\n")},
+				},
+			},
+		}
+
+	case "move_file":
+		source, _ := arguments["source"].(string)
+		dest, _ := arguments["dest"].(string)
+		srcPath := filepath.Join(vaultPath, source)
+		dstPath := filepath.Join(vaultPath, dest)
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: fmt.Sprintf("Error: %v", err)},
+			}
+		}
+		if err := os.Rename(srcPath, dstPath); err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: fmt.Sprintf("Error: %v", err)},
+			}
+		}
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": fmt.Sprintf("File moved: %s -> %s", source, dest)},
+				},
+			},
+		}
+
+	case "get_file_info":
+		path, _ := arguments["path"].(string)
+		fullPath := filepath.Join(vaultPath, path)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: fmt.Sprintf("Error: %v", err)},
+			}
+		}
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": fmt.Sprintf("Name: %s\nSize: %d bytes\nModified: %s\nIs Directory: %v", info.Name(), info.Size(), info.ModTime().Format(time.RFC3339), info.IsDir())},
 				},
 			},
 		}
