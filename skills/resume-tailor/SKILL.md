@@ -35,36 +35,44 @@ Use the obsidian-vault MCP to:
 - `search_content` - Find relevant experience in other notes
 - `list_directory` - List resume files
 
-## How to Tailor a Resume
+## Workflow: Creating a Tailored Resume
 
-1. **Get job description**: Read the job posting or create a note with requirements
-2. **Read master resume**: Load the user's main resume
-3. **Match keywords**: Find matching skills and experiences
-4. **Create tailored version**: Write a new resume highlighting relevant points
+1. **Create job application note**: In `21-Applications/2026-Spring/`
+2. **Create resume folder**: In `22-Resumes/{Company}-{Role}/`
+3. **Generate tailored resume**: Using the master resume, tailor for the job
+4. **Save to folder**: Save as `resume.pdf` in the job's folder
+5. **Link in application**: Update job note with link to resume
 
-## Resume Format
+## Resume Structure
+
+```
+22-Resumes/
+├── resume.tex          # Master LaTeX
+├── resume.pdf         # Master PDF
+├── Master-Index.md    # List of all resumes
+├── Generated/         # AI-generated variations
+├── ada_DevOps/       # Job-specific resumes
+│   └── resume.pdf
+├── Apple_Expert/
+│   └── resume.pdf
+└── ...
+```
+
+## Job Application Note Format
+
+Each job application note should link to its resume:
 
 ```markdown
-# Tailored Resume: [Company] - [Role]
-Date: [Date]
+# Job Application: Company - Role
 
-## Summary
-[2-3 sentence summary highlighting relevant experience]
-
-## Experience
-### [Job Title] at [Company] | [Dates]
-- [Relevant achievement 1]
-- [Relevant achievement 2]
-
-## Skills
-- [Skill 1] - [Skill 2] - [Skill 3]
-
-## Education
-[Relevant education]
+## Resume Used
+[[../22-Resumes/company-role/resume.pdf]]
 ```
 
 ## Examples
 
-- "Tailor my resume for the Google SWE position" → read job description, read master resume, create tailored version
-- "What experience should I highlight for this ML role?" → search notes for ML-related projects
-- "Update my master resume with new project" → read and update master resume
+- "Tailor my resume for the Google SWE position" → 
+  1. Create job note in 21-Applications
+  2. Create folder in 22-Resumes/Google-SWE/
+  3. Generate tailored resume
+  4. Link resume in job note
