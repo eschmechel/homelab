@@ -1,0 +1,74 @@
+# RSS Feeds Configuration
+feeds:
+  # Tech/Programming
+  - name: Hacker News
+    url: https://news.ycombinator.com/rss
+    enabled: true
+  
+  - name: TechCrunch
+    url: https://techcrunch.com/feed/
+    enabled: true
+  
+  - name: Ars Technica
+    url: https://feeds.arstechnica.com/arstechnica/index
+    enabled: false
+  
+  # AI/ML
+  - name: OpenAI Blog
+    url: https://openai.com/blog/rss.xml
+    enabled: true
+  
+  - name: Anthropic Blog
+    url: https://www.anthropic.com/rss.xml
+    enabled: false
+  
+  # Science
+  - name: Nature
+    url: https://www.nature.com/nature.rss
+    enabled: false
+  
+  - name: Science Daily
+    url: https://www.sciencedaily.com/rss/all.xml
+    enabled: false
+  
+  # Security
+  - name: Krebs on Security
+    url: https://krebsonsecurity.com/feed/
+    enabled: false
+  
+  - name: The Hacker News
+    url: https://feeds.feedburner.com/TheHackersNews
+    enabled: false
+
+# LLM Enhancement Settings
+llm:
+  enabled: false
+  api_key_env: LLM_API_KEY
+  model: gpt-4
+  summarize: true
+  extract_insights: true
+  find_related_concepts: true
+
+# Notification Settings
+notifications:
+  telegram:
+    enabled: true
+    notify_on_new: true
+    notify_on_error: true
+  
+  ntfy:
+    enabled: false
+    server: https://ntfy.sh
+    topic: rss-updates
+
+# Storage Settings
+storage:
+  cache_dir: /tmp/rss_cache
+  vault_path: /mnt/GOONDRIVE/Obsidian Notes/Personal Knowledge System
+  output_folder: 40-Knowledge/News
+  max_articles_per_run: 20
+
+# Schedule (for systemd timer)
+schedule:
+  interval_hours: 6
+  start_time: "06:00"

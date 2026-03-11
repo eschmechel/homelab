@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,6 +33,139 @@ func findDateMatches(pattern, content, startDate, endDate string) []string {
 		}
 	}
 	return results
+}
+
+func getTelegramConfig() (string, string, error) {
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	chatID := os.Getenv("TELEGRAM_CHAT_ID")
+
+	if token == "" {
+		return "", "", fmt.Errorf("TELEGRAM_BOT_TOKEN not set")
+	}
+	if chatID == "" {
+		return "", "", fmt.Errorf("TELEGRAM_CHAT_ID not set")
+	}
+
+	return token, chatID, nil
+}
+
+func sendTelegramMessage(title, message, level string) error {
+	token, chatID, err := getTelegramConfig()
+	if err != nil {
+		return err
+	}
+
+	emoji := "ℹ️"
+	switch level {
+	case "success":
+		emoji = "✅"
+	case "warning":
+		emoji = "⚠️"
+	case "error":
+		emoji = "❌"
+	}
+
+	text := fmt.Sprintf("%s *%s*\n\n%s", emoji, title, message)
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+
+	msg := map[string]interface{}{
+		"chat_id":    chatID,
+		"text":       text,
+		"parse_mode": "Markdown",
+	}
+
+	jsonData, _ := json.Marshal(msg)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("telegram API returned status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func sendTelegramNotification(title, message, level string) (string, error) {
+	if err := sendTelegramMessage(title, message, level); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Notification sent: %s", title), nil
+}
+
+func sendJobAlert(company, status string, notifyIndividual bool) (string, error) {
+	if notifyIndividual {
+		if err := sendTelegramMessage("Job Alert", fmt.Sprintf("%s: %s", company, status), "info"); err != nil {
+			return "", err
+		}
+	}
+
+	// Track for daily summary - store in a temp file
+	summaryFile := "/tmp/job_alerts_today.json"
+	var alerts []map[string]string
+
+	if data, err := os.ReadFile(summaryFile); err == nil {
+		json.Unmarshal(data, &alerts)
+	}
+
+	alerts = append(alerts, map[string]string{
+		"company": company,
+		"status":  status,
+		"time":    time.Now().Format(time.RFC3339),
+	})
+
+	if data, err := json.Marshal(alerts); err == nil {
+		os.WriteFile(summaryFile, data, 0644)
+	}
+
+	if notifyIndividual {
+		return fmt.Sprintf("Job alert sent for %s: %s", company, status), nil
+	}
+	return fmt.Sprintf("Job alert tracked (notify=no): %s - %s", company, status), nil
+}
+
+func sendRSSNotification(count string, notify bool) (string, error) {
+	if notify {
+		if err := sendTelegramMessage("RSS Update", fmt.Sprintf("%s new articles fetched and saved to vault", count), "info"); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("RSS notification: %s articles (notify=%v)", count, notify), nil
+}
+
+func GetDailyJobSummary() (string, error) {
+	summaryFile := "/tmp/job_alerts_today.json"
+	var alerts []map[string]string
+
+	data, err := os.ReadFile(summaryFile)
+	if err != nil {
+		return "No job alerts today", nil
+	}
+
+	if err := json.Unmarshal(data, &alerts); err != nil {
+		return "", err
+	}
+
+	if len(alerts) == 0 {
+		return "No job alerts today", nil
+	}
+
+	summary := fmt.Sprintf("📊 Daily Job Summary\n\nTotal: %d alerts\n\n", len(alerts))
+	for _, alert := range alerts {
+		summary += fmt.Sprintf("• %s: %s\n", alert["company"], alert["status"])
+	}
+
+	// Clear the file
+	os.WriteFile(summaryFile, []byte("[]"), 0644)
+
+	return summary, nil
 }
 
 func handleInitialize(id interface{}) JSONRPCResponse {
@@ -175,6 +311,44 @@ func handleToolsList(id interface{}) JSONRPCResponse {
 					"path":       map[string]any{"type": "string", "description": "Directory to search"},
 				},
 				"required": []string{"start_date"},
+			},
+		},
+		{
+			"name":        "send_notification",
+			"description": "Send a notification via Telegram",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":   map[string]any{"type": "string", "description": "Notification title"},
+					"message": map[string]any{"type": "string", "description": "Notification message"},
+					"level":   map[string]any{"type": "string", "description": "Alert level: info, success, warning, error"},
+				},
+				"required": []string{"title", "message"},
+			},
+		},
+		{
+			"name":        "send_job_alert",
+			"description": "Send a job application alert notification",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"company": map[string]any{"type": "string", "description": "Company name"},
+					"status":  map[string]any{"type": "string", "description": "Job status (e.g., Applied, Interview, Offer)"},
+					"notify":  map[string]any{"type": "string", "description": "Send individual notification: yes or no"},
+				},
+				"required": []string{"company", "status"},
+			},
+		},
+		{
+			"name":        "send_rss_notification",
+			"description": "Send RSS fetch summary notification",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"count":  map[string]any{"type": "string", "description": "Number of new articles"},
+					"notify": map[string]any{"type": "string", "description": "Send notification: yes or no"},
+				},
+				"required": []string{"count"},
 			},
 		},
 	}
@@ -492,6 +666,74 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 			Result: map[string]any{
 				"content": []map[string]any{
 					{"type": "text", "text": strings.Join(results, "\n")},
+				},
+			},
+		}
+
+	case "send_notification":
+		title, _ := arguments["title"].(string)
+		message, _ := arguments["message"].(string)
+		level, _ := arguments["level"].(string)
+
+		result, err := sendTelegramNotification(title, message, level)
+		if err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: err.Error()},
+			}
+		}
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": result},
+				},
+			},
+		}
+
+	case "send_job_alert":
+		company, _ := arguments["company"].(string)
+		status, _ := arguments["status"].(string)
+		notify, _ := arguments["notify"].(string)
+
+		result, err := sendJobAlert(company, status, notify == "yes")
+		if err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: err.Error()},
+			}
+		}
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": result},
+				},
+			},
+		}
+
+	case "send_rss_notification":
+		count, _ := arguments["count"].(string)
+		notify, _ := arguments["notify"].(string)
+
+		result, err := sendRSSNotification(count, notify == "yes")
+		if err != nil {
+			return JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      id,
+				Error:   &JSONError{Code: -32602, Message: err.Error()},
+			}
+		}
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": result},
 				},
 			},
 		}
