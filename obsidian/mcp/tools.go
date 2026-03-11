@@ -4,9 +4,33 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+func matchRegex(pattern, content string) bool {
+	re := regexp.MustCompile(pattern)
+	return re.FindString(content) != ""
+}
+
+func findDateMatches(pattern, content, startDate, endDate string) []string {
+	re := regexp.MustCompile(pattern)
+	matches := re.FindAllStringSubmatch(content, -1)
+
+	var results []string
+	for _, match := range matches {
+		if len(match) > 1 {
+			date := match[1]
+			if startDate != "" && date >= startDate {
+				if endDate == "" || date <= endDate {
+					results = append(results, date)
+				}
+			}
+		}
+	}
+	return results
+}
 
 func handleInitialize(id interface{}) JSONRPCResponse {
 	return JSONRPCResponse{
@@ -126,6 +150,31 @@ func handleToolsList(id interface{}) JSONRPCResponse {
 					"path": map[string]any{"type": "string", "description": "Relative path to file"},
 				},
 				"required": []string{"path"},
+			},
+		},
+		{
+			"name":        "search_by_tag",
+			"description": "Search for notes by YAML frontmatter tags using ripgrep",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"tag":  map[string]any{"type": "string", "description": "Tag to search for"},
+					"path": map[string]any{"type": "string", "description": "Directory to search (default: vault root)"},
+				},
+				"required": []string{"tag"},
+			},
+		},
+		{
+			"name":        "search_by_date",
+			"description": "Search for notes by date range in YAML frontmatter",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"start_date": map[string]any{"type": "string", "description": "Start date (YYYY-MM-DD)"},
+					"end_date":   map[string]any{"type": "string", "description": "End date (YYYY-MM-DD)"},
+					"path":       map[string]any{"type": "string", "description": "Directory to search"},
+				},
+				"required": []string{"start_date"},
 			},
 		},
 	}
@@ -371,6 +420,78 @@ func handleToolsCall(id interface{}, params map[string]any) JSONRPCResponse {
 			Result: map[string]any{
 				"content": []map[string]any{
 					{"type": "text", "text": fmt.Sprintf("Name: %s\nSize: %d bytes\nModified: %s\nIs Directory: %v", info.Name(), info.Size(), info.ModTime().Format(time.RFC3339), info.IsDir())},
+				},
+			},
+		}
+
+	case "search_by_tag":
+		tag, _ := arguments["tag"].(string)
+		searchPath, _ := arguments["path"].(string)
+		fullPath := vaultPath
+		if searchPath != "" {
+			fullPath = resolvePath(searchPath)
+		}
+
+		var results []string
+		filepath.Walk(fullPath, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(p, ".md") {
+				return nil
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return nil
+			}
+			content := string(data)
+			tagPattern := fmt.Sprintf(`tags:.*%s`, tag)
+			if strings.Contains(content, tag) || matchRegex(tagPattern, content) {
+				rel, _ := filepath.Rel(vaultPath, p)
+				results = append(results, rel)
+			}
+			return nil
+		})
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": strings.Join(results, "\n")},
+				},
+			},
+		}
+
+	case "search_by_date":
+		startDate, _ := arguments["start_date"].(string)
+		endDate, _ := arguments["end_date"].(string)
+		searchPath, _ := arguments["path"].(string)
+		fullPath := vaultPath
+		if searchPath != "" {
+			fullPath = resolvePath(searchPath)
+		}
+
+		var results []string
+		filepath.Walk(fullPath, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(p, ".md") {
+				return nil
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return nil
+			}
+			content := string(data)
+			datePattern := `date:\s*(\d{4}-\d{2}-\d{2})`
+			matches := findDateMatches(datePattern, content, startDate, endDate)
+			if len(matches) > 0 {
+				rel, _ := filepath.Rel(vaultPath, p)
+				results = append(results, rel)
+			}
+			return nil
+		})
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      id,
+			Result: map[string]any{
+				"content": []map[string]any{
+					{"type": "text", "text": strings.Join(results, "\n")},
 				},
 			},
 		}
