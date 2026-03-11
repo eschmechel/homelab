@@ -30,3 +30,4 @@ notifications/go.sum
 # Environment
 .env
 *.env.local
+monitoring/.env
